@@ -18,11 +18,11 @@ const pool = new Pool({
  */
 const getUserWithEmail = function(email) {
   return pool.query(`
-  SELECT name
+  SELECT *
   FROM users
-  WHERE email like $1
+  WHERE email = $1;
   `, [email])
-    .then(res => res.rows);
+    .then(res => res.rows[0]);
 };
 exports.getUserWithEmail = getUserWithEmail;
 
@@ -33,11 +33,11 @@ exports.getUserWithEmail = getUserWithEmail;
  */
 const getUserWithId = function(id) {
   return pool.query(`
-  SELECT name
+  SELECT *
   FROM users
-  where id like $1
+  where id = $1;
   `, [id])
-    .then(res => res.rows);
+    .then(res => res.rows[0]);
 };
 exports.getUserWithId = getUserWithId;
 
@@ -82,8 +82,6 @@ exports.getAllReservations = getAllReservations;
 
 
 
-
-
 /// Properties
 
 /**
@@ -93,10 +91,56 @@ exports.getAllReservations = getAllReservations;
  * @return {Promise<[{}]>}  A promise to the properties.
  */
 const getAllProperties = function(options, limit = 10) {
-  return pool.query(`
-  SELECT * FROM properties
-  LIMIT $1
-  `, [limit])
+  // 1
+  const queryParams = [];
+  // 2
+  let queryString = `
+  SELECT properties.*, avg(property_reviews.rating) as average_rating
+  FROM properties
+  JOIN property_reviews ON properties.id = property_id
+  `;
+
+  if (options.minimum_price_per_night) {
+    queryParams.push(`%${options.minimum_price_per_night}`);
+    queryString += `AND cost_per_night >= $${queryParams.length}`;
+  }
+
+
+  if (options.maximum_price_per_night) {
+    queryParams.push(`%${options.maximum_price_per_night}`);
+    queryString += `AND cost_per_night <= $${queryParams.length}`;
+  }
+
+  if (options.maximum_rating) {
+    queryParams.push(`%${options.maximum_rating}`);
+    queryString += `AND rating <= $${queryParams.length}`;
+  }
+
+
+  if (options.minimum_rating) {
+    queryParams.push(`%${options.minumum_rating}`);
+    queryString += `AND rating >= $${queryParams.length}`;
+  }
+
+
+  if (options.city) {
+    queryParams.push(`%${options.city}%`);
+    queryString += `AND city LIKE $${queryParams.length} `; // where or and???
+  }
+
+  // 4
+  queryParams.push(limit);
+  queryString += `
+  GROUP BY properties.id
+  ORDER BY cost_per_night
+  LIMIT $${queryParams.length};
+  `;
+
+  // 5
+  console.log(queryString, queryParams);
+
+  // 6
+  return pool.query(queryString, queryParams)
     .then(res => res.rows);
 };
 exports.getAllProperties = getAllProperties;
